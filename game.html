@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Farm Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(to bottom, #87CEEB 0%, #98D8C8 100%);
+            overflow: hidden;
+        }
+
+        #gameCanvas {
+            display: block;
+            margin: 20px auto;
+            background: #90EE90;
+            border: 5px solid #8B4513;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px 30px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            font-weight: bold;
+        }
+
+        .money {
+            font-size: 24px;
+            color: #FFD700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .inventory {
+            display: flex;
+            gap: 15px;
+            font-size: 18px;
+        }
+
+        .inventory-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: #f0f0f0;
+            padding: 5px 10px;
+            border-radius: 8px;
+        }
+
+        #shop {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            display: flex;
+            gap: 15px;
+        }
+
+        .shop-btn {
+            padding: 15px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .shop-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 10px rgba(0,0,0,0.2);
+        }
+
+        .shop-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .buy-cow {
+            background: #FFB6C1;
+            color: #8B4513;
+        }
+
+        .buy-hen {
+            background: #FFA500;
+            color: white;
+        }
+
+        .sell-milk {
+            background: #87CEEB;
+            color: white;
+        }
+
+        .sell-eggs {
+            background: #FFD700;
+            color: #8B4513;
+        }
+
+        .buy-sheep {
+            background: #90EE90;
+            color: #8B4513;
+        }
+
+        .buy-pig {
+            background: #FFCCCB;
+            color: #8B4513;
+        }
+
+        .notification {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px 40px;
+            border-radius: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            display: none;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div class="money">💰 $<span id="moneyDisplay">100</span></div>
+        <div class="inventory">
+            <div class="inventory-item">🥛 <span id="milkCount">0</span></div>
+            <div class="inventory-item">🥚 <span id="eggCount">0</span></div>
+            <div class="inventory-item">🐑 <span id="sheepCount">0</span></div>
+            <div class="inventory-item">🐖 <span id="pigCount">0</span></div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" width="1000" height="600"></canvas>
+
+    <div id="shop">
+        <button class="shop-btn buy-cow" onclick="buyCow()">Buy Cow 🐄 ($50)</button>
+        <button class="shop-btn buy-hen" onclick="buyHen()">Buy Hen 🐔 ($20)</button>
+        <button class="shop-btn sell-milk" onclick="sellMilk()">Sell All Milk ($10 each)</button>
+        <button class="shop-btn sell-eggs" onclick="sellEggs()">Sell All Eggs ($5 each)</button>
+        <button class="shop-btn buy-sheep" onclick="buySheep()">Buy Sheep 🐑 ($30)</button>
+        <button class="shop-btn buy-pig" onclick="buyPig()">Buy Pig 🐖 ($40)</button>
+    </div>
+
+    <div id="notification"></div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let money = 100;
+        let milk = 0;
+        let eggs = 0;
+        let cows = [];
+        let hens = [];
+        let sheep = [];
+        let pigs = [];
+        let products = [];
+
+        const COW_PRICE = 50;
+        const HEN_PRICE = 20;
+        const MILK_PRICE = 10;
+        const EGG_PRICE = 5;
+        const SHEEP_PRICE = 30;
+        const PIG_PRICE = 40;
+        const PRODUCTION_TIME = 20000;
+
+        class Animal {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.lastProduction = Date.now();
+                this.direction = Math.random() > 0.5 ? 1 : -1;
+                this.speed = 0.3 + Math.random() * 0.5;
+            }
+
+            update() {
+                this.x += this.speed * this.direction;
+                if (this.x < 50 || this.x > canvas.width - 50) {
+                    this.direction *= -1;
+                }
+
+                if (Date.now() - this.lastProduction >= PRODUCTION_TIME) {
+                    this.produce();
+                    this.lastProduction = Date.now();
+                }
+            }
+
+            produce() {
+                if (this.type === 'cow') {
+                    milk++;
+                    products.push(new Product(this.x, this.y - 40, 'milk'));
+                } else if (this.type === 'hen') {
+                    eggs++;
+                    products.push(new Product(this.x, this.y - 40, 'egg'));
+                } else if (this.type === 'sheep') {
+                    milk++;
+                    products.push(new Product(this.x, this.y - 40, 'milk'));
+                } else if (this.type === 'pig') {
+                    eggs++;
+                    products.push(new Product(this.x, this.y - 40, 'egg'));
+                }
+                updateUI();
+            }
+
+            draw() {
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                if (this.type === 'cow') {
+                    ctx.fillText('🐄', this.x, this.y);
+                } else if (this.type === 'hen') {
+                    ctx.fillText('🐔', this.x, this.y);
+                } else if (this.type === 'sheep') {
+                    ctx.fillText('🐑', this.x, this.y);
+                } else if (this.type === 'pig') {
+                    ctx.fillText('🐖', this.x, this.y);
+                }
+
+                if (this.type === 'cow' || this.type === 'hen') {
+                    const progress = (Date.now() - this.lastProduction) / PRODUCTION_TIME;
+                    const barWidth = 40;
+                    const barHeight = 5;
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(this.x - barWidth/2, this.y + 30, barWidth, barHeight);
+                    ctx.fillStyle = '#4CAF50';
+                    ctx.fillRect(this.x - barWidth/2, this.y + 30, barWidth * progress, barHeight);
+                }
+            }
+        }
+
+        class Product {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.lifetime = 2000;
+                this.createdAt = Date.now();
+                this.opacity = 1;
+            }
+
+            update() {
+                this.y -= 1;
+                const age = Date.now() - this.createdAt;
+                this.opacity = 1 - (age / this.lifetime);
+                return age < this.lifetime;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.font = '32px Arial';
+                ctx.textAlign = 'center';
+                const emoji = this.type === 'milk' ? '🥛' : '🥚';
+                ctx.fillText(emoji, this.x, this.y);
+                ctx.restore();
+            }
+        }
+
+        function drawBackground() {
+            ctx.fillStyle = '#90EE90';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#7CCD7C';
+            for (let i = 0; i < 20; i++) {
+                for (let j = 0; j < 10; j++) {
+                    if (Math.random() > 0.7) {
+                        ctx.fillRect(i * 50 + Math.random() * 20, j * 60 + Math.random() * 20, 3, 8);
+                    }
+                }
+            }
+
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(100, 80, 40, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#8B4513';
+            ctx.lineWidth = 4;
+            for (let i = 0; i < canvas.width; i += 60) {
+                ctx.beginPath();
+                ctx.moveTo(i, canvas.height - 50);
+                ctx.lineTo(i, canvas.height - 100);
+                ctx.stroke();
+            }
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height - 75);
+            ctx.lineTo(canvas.width, canvas.height - 75);
+            ctx.stroke();
+        }
+
+        function buyCow() {
+            if (money >= COW_PRICE) {
+                money -= COW_PRICE;
+                const x = 100 + Math.random() * (canvas.width - 200);
+                const y = 150 + Math.random() * (canvas.height - 300);
+                cows.push(new Animal(x, y, 'cow'));
+                updateUI();
+                showNotification('Cow purchased!');
+            } else {
+                showNotification('Not enough money!');
+            }
+        }
+
+        function buyHen() {
+            if (money >= HEN_PRICE) {
+                money -= HEN_PRICE;
+                const x = 100 + Math.random() * (canvas.width - 200);
+                const y = 150 + Math.random() * (canvas.height - 300);
+                hens.push(new Animal(x, y, 'hen'));
+                updateUI();
+                showNotification('Hen purchased!');
+            } else {
+                showNotification('Not enough money!');
+            }
+        }
+
+        function buySheep() {
+            if (money >= SHEEP_PRICE) {
+                money -= SHEEP_PRICE;
+                const x = 100 + Math.random() * (canvas.width - 200);
+                const y = 150 + Math.random() * (canvas.height - 300);
+                sheep.push(new Animal(x, y, 'sheep'));
+                updateUI();
+                showNotification('Sheep purchased!');
+            } else {
+                showNotification('Not enough money!');
+            }
+        }
+
+        function buyPig() {
+            if (money >= PIG_PRICE) {
+                money -= PIG_PRICE;
+                const x = 100 + Math.random() * (canvas.width - 200);
+                const y = 150 + Math.random() * (canvas.height - 300);
+                pigs.push(new Animal(x, y, 'pig'));
+                updateUI();
+                showNotification('Pig purchased!');
+            } else {
+                showNotification('Not enough money!');
+            }
+        }
+
+        function sellMilk() {
+            if (milk > 0) {
+                const earned = milk * MILK_PRICE;
+                money += earned;
+                milk = 0;
+                updateUI();
+                showNotification('Sold milk for $' + earned + '!');
+            }
+        }
+
+        function sellEggs() {
+            if (eggs > 0) {
+                const earned = eggs * EGG_PRICE;
+                money += earned;
+                eggs = 0;
+                updateUI();
+                showNotification('Sold eggs for $' + earned + '!');
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('moneyDisplay').textContent = money;
+            document.getElementById('milkCount').textContent = milk;
+            document.getElementById('eggCount').textContent = eggs;
+            document.getElementById('sheepCount').textContent = sheep.length;
+            document.getElementById('pigCount').textContent = pigs.length;
+        }
+
+        function showNotification(message) {
+            const notif = document.getElementById('notification');
+            notif.textContent = message;
+            notif.style.display = 'block';
+            setTimeout(function() {
+                notif.style.display = 'none';
+            }, 1500);
+        }
+
+        function gameLoop() {
+            drawBackground();
+            const allAnimals = cows.concat(hens, sheep, pigs);
+            for (let i = 0; i < allAnimals.length; i++) {
+                allAnimals[i].update();
+                allAnimals[i].draw();
+            }
+
+            products = products.filter(function(product) {
+                const alive = product.update();
+                if (alive) product.draw();
+                return alive;
+            });
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
